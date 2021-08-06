@@ -1,0 +1,119 @@
+function onChange(e) {
+  // This script records changes when particular cell values are changed in the Warehouse locations spreadsheet. They are recorded in a "Purchase", "Reorder" and "Changelog" sheet.
+  
+  /*The "Purchase" sheet includes these columns:
+  ["Timestamp", "Sheet name", "Taskname", "Current Stock Value"]
+  */
+  
+  /*The "Reorder" sheet includes these columns:
+  ["Timestamp", "Sheet name", "Taskname", "Current Stock Value"]
+  */
+  
+  /*The changelog sheet includes these columns:
+  ["Users", "Timestamp", "Warehouse Location", "Taskname", "New value", "Old Value", "Change In Value"]
+  */
+
+
+  //The name of the sheets to watch for changes
+  const sheetsToWatch = ['Office', 'Page', 'Jawad'];
+  
+  // Name of the sheet where the Changelog is stored
+  const changelogSheetName = "Tracking Changes";
+  
+  //Name of the Reorder sheet
+  const salesSheetName = "Reorder";
+  
+  //Name of the Purchase sheet
+  const purchaseSheetName = "Purchase";
+  
+  const origValue = e.oldValue; //orignial value of the cell before the value was changed manually
+  const timestamp = new Date(); //datetime of the change
+  const ss = SpreadsheetApp.getActiveSpreadsheet(); //Active Spradsheet you are working on
+  const sheet = ss.getActiveSheet(); //active sheet in the spreadsheet in which the change was made
+  const cell = sheet.getActiveCell(); //cell in the active sheet where the change was made
+  const sheetName = sheet.getName(); //name of the active sheet
+
+
+  // if it is the changelog sheet that is being edited, do not record the change
+  if (sheetName == changelogSheetName) return;
+
+  // if the sheet name does not appear in sheetsToWatch, do not record the change
+  let matchFound = false;
+  
+  for (let i = 0; i < sheetsToWatch.length; i++) {
+  
+   if (sheetName.match(sheetsToWatch[i])) matchFound = true;
+   
+  };
+  
+  if (!matchFound) return;
+
+  var columnLabel = sheet.getRange(1, cell.getColumn()).getValue(); //Column header of the cell where the change was made
+  var rowLabel = sheet.getRange(cell.getRow(), /* column B */ 2).getValue(); // First Row Value of the cell where the change was made
+  var changeInValue = cell.getValue() - origValue; //Difference in the value between the old value of the cell and the new value
+  
+  // first record change in changeLogSheet
+  const changelogSheet = ss.getSheetByName(changelogSheetName);
+  
+  if (!changelogSheet) {
+  
+    // no changelog sheet found, create it as the last sheet in the spreadsheet
+    changelogSheet = ss.insertSheet(changelogSheetName, ss.getNumSheets());
+    
+    Utilities.sleep(2000); // give time for the new sheet to render before going back
+    
+    //add new row with the below values in the changelog sheet 
+    changelogSheet.appendRow(["Email","Timestamp", "Sheet name", "Product Description", "Column label", "Cell address", "New value entered", "Old Value", "Change In Value"]);
+    
+    changelogSheet.setFrozenRows(1); //Set the first row as Frozen
+    
+  }
+  //if changelog sheet already exists
+  changelogSheet.appendRow([Session.getActiveUser().getEmail(), timestamp, sheetName, rowLabel, cell.getValue(), origValue, changeInValue]);
+  
+  Utilities.sleep(1000);
+  
+  //If the cell value where change occurred has the column header "Current Inventory" then only the change will be capture in either Reorder or Purchase sheet
+  if(columnLabel == "Current Inventory") {
+  
+    const salesSheet = ss.getSheetByName(salesSheetName);
+    const purchaseSheet = ss.getSheetByName(purchaseSheetName);
+    // If change of value is descreased and quantity becomes less than 10
+    // All old values will be deleted first
+    // Then record gets appended in reorder sheet
+    if(changeInValue<0 && cell.getValue()<10) {
+
+      var s = ss.getSheetByName(salesSheetName);
+      var r = s.getRange('C:C');
+      var v = r.getValues();
+      for(var i=v.length-1;i>=0;i--)
+        if(v[0,i]==rowLabel)
+          s.deleteRow(i+1);
+      
+      Utilities.sleep(1000);
+
+      salesSheet.appendRow([timestamp, sheetName, rowLabel, cell.getValue()]);
+    
+    }
+    // If value increases, 
+    // delete's any record from reorder sheet. 
+    // then record gets appended in purchase sheet
+
+    if(changeInValue>0) {
+    
+      var s = ss.getSheetByName(salesSheetName);
+      var r = s.getRange('C:C');
+      var v = r.getValues();
+      for(var i=v.length-1;i>=0;i--)
+        if(v[0,i]==rowLabel)
+          s.deleteRow(i+1);
+      
+      Utilities.sleep(1000);
+
+      purchaseSheet.appendRow([timestamp, sheetName, rowLabel, cell.getValue()]);
+
+    }
+    
+  }
+
+}
